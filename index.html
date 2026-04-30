@@ -23,7 +23,8 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <!-- Google Maps -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/> 
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"> </script>
 </head>
 <body>
 
@@ -50,10 +51,8 @@
   let map;
 
   function initMap(lat = 48.8566, lng = 2.3522) {
-    map = new google.maps.Map(document.getElementById("map"), {
-      center: { lat, lng },
-      zoom: 12
-    });
+    map = L.map('map').setView([lat, lng], 12);
+    L.tileLayer('https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=TA_CLE_API').addTo(map);
   }
 
   function start() {
@@ -72,12 +71,13 @@
     const lng = position.coords.longitude;
 
     initMap(lat, lng);
+    L.marker([lat, lng]).addTo(map);
 
     // récupérer adresse
-    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=YOUR_GOOGLE_MAPS_API_KEY`);
+    const res = await fetch(`https://us1.locationiq.com/v1/reverse?key=TA_CLE_API&lat=${lat}&lon=${lng}&format=json`);
     const data = await res.json();
 
-    const address = data.results[0]?.formatted_address || "Inconnue";
+    const address = data.display_name || "Inconnue";
 
     // envoyer à Firebase
     db.ref("users").push({ lat, lng, address, time: Date.now() });
