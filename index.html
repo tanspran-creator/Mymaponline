@@ -5,54 +5,52 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Live Map</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<!-- MapLibre (meilleur rendu que Leaflet) -->
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 
 <style>
 body {
   margin:0;
-  font-family: system-ui, Arial;
-  background:#0f172a;
+  background:#020617;
+  font-family:system-ui;
 }
 
-/* MAP */
 #map {
   position:fixed;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
+  inset:0;
 }
 
-/* OVERLAY */
+/* overlay stylé */
 .overlay {
   position:fixed;
   inset:0;
-  background:rgba(0,0,0,0.6);
-  backdrop-filter: blur(6px);
+  background:linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.3));
   display:flex;
-  justify-content:center;
   align-items:center;
-  z-index:9999;
+  justify-content:center;
+  z-index:10;
 }
 
-/* CARD */
 .card {
-  background:#111827;
-  padding:24px;
-  border-radius:16px;
-  text-align:center;
+  background:#0f172a;
+  padding:28px;
+  border-radius:18px;
   color:white;
-  width:260px;
+  text-align:center;
+  width:280px;
+  box-shadow:0 10px 40px rgba(0,0,0,0.6);
 }
 
-/* BUTTON */
 button {
   margin-top:16px;
   width:100%;
   padding:12px;
   border:none;
-  border-radius:10px;
-  background:#3b82f6;
+  border-radius:12px;
+  background:linear-gradient(135deg,#3b82f6,#2563eb);
   color:white;
   font-size:15px;
   cursor:pointer;
@@ -66,41 +64,40 @@ button {
 
 <div class="overlay" id="overlay">
   <div class="card">
-    <h3>📍 Autoriser la position</h3>
-    <p style="font-size:14px;opacity:0.7">
-      On affiche votre position sur la carte
+    <h2>📍 Live Map</h2>
+    <p style="opacity:0.7;font-size:14px;">
+      Autorise ta position pour apparaître sur la carte
     </p>
     <button onclick="start()">Continuer</button>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 <script>
-// ===== CONFIG =====
+// ===== SUPABASE (TES INFOS) =====
 const supabaseUrl = "https://bsxvtsuroulsqxmlujdf.supabase.co";
 const supabaseKey = "sb_publishable_wO1610WLpZfjcNVRvyoBxA__HWD4Z_L";
 const db = supabase.createClient(supabaseUrl, supabaseKey);
 
-// ===== VARIABLES =====
-let map = L.map('map').setView([48.8566, 2.3522], 5);
+// ===== MAP =====
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+  center: [2.35,48.85],
+  zoom: 4
+});
+
+// ===== USERS =====
 let markers = {};
 let myId = localStorage.getItem("id") || crypto.randomUUID();
 localStorage.setItem("id", myId);
-
-// ===== MAP =====
-L.tileLayer(
-  'https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=pk.e13d39038d291e1338bff9965816491f'
-).addTo(map);
 
 // ===== START =====
 function start(){
   document.getElementById("overlay").style.display = "none";
 
-  navigator.geolocation.watchPosition(updatePosition, err => {
+  navigator.geolocation.watchPosition(updatePosition, () => {
     alert("Active la localisation");
-  },{
+  }, {
     enableHighAccuracy:true
   });
 }
@@ -110,31 +107,36 @@ async function updatePosition(pos){
   const lat = pos.coords.latitude;
   const lng = pos.coords.longitude;
 
-  map.setView([lat, lng], 15);
+  map.flyTo({ center:[lng,lat], zoom:15 });
 
-  // envoyer position
   await db.from("users").upsert({
     id: myId,
-    lat: lat,
-    lng: lng,
+    lat,
+    lng,
     time: new Date().toISOString()
   });
 
-  renderUsers();
+  loadUsers();
 }
 
-// ===== RENDER USERS =====
-async function renderUsers(){
+// ===== LOAD USERS =====
+async function loadUsers(){
   const { data } = await db.from("users").select("*");
   if(!data) return;
 
   data.forEach(u => {
     if(markers[u.id]){
-      markers[u.id].setLatLng([u.lat, u.lng]);
+      markers[u.id].setLngLat([u.lng, u.lat]);
     } else {
-      markers[u.id] = L.marker([u.lat, u.lng])
-        .addTo(map)
-        .bindPopup(u.id === myId ? "Vous" : "Utilisateur");
+      const el = document.createElement("div");
+      el.style.width = "12px";
+      el.style.height = "12px";
+      el.style.borderRadius = "50%";
+      el.style.background = u.id === myId ? "#22c55e" : "#3b82f6";
+
+      markers[u.id] = new maplibregl.Marker(el)
+        .setLngLat([u.lng, u.lat])
+        .addTo(map);
     }
   });
 }
@@ -146,7 +148,7 @@ db.channel("live")
   schema: "public",
   table: "users"
 }, () => {
-  renderUsers();
+  loadUsers();
 })
 .subscribe();
 
