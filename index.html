@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carte temps réel</title>
+
+  <style>
+    body { margin:0; font-family: Arial, sans-serif; background:#0f172a; color:white; }
+    #map { height:100vh; width:100%; }
+    .panel {
+      position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.7); padding:12px 20px; border-radius:10px;
+    }
+    button {
+      margin-top:8px; padding:8px 16px; border:none; border-radius:6px;
+      background:#3b82f6; color:white; cursor:pointer;
+    }
+  </style>
+
+  <!-- Firebase v8 (plus simple ici) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <!-- Google Maps -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY"></script>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="panel" id="panel">
+  Ce site utilise votre position
+  <br>
+  <button onclick="start()">Continuer</button>
+</div>
+
+<script>
+  // CONFIG FIREBASE
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+    projectId: "YOUR_PROJECT"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  let map;
+
+  function initMap(lat = 48.8566, lng = 2.3522) {
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: { lat, lng },
+      zoom: 12
+    });
+  }
+
+  function start() {
+    document.getElementById("panel").style.display = "none";
+
+    if (!navigator.geolocation) {
+      alert("Géolocalisation non supportée");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(success, error);
+  }
+
+  async function success(position) {
+    const lat = position.coords.latitude;
+    const lng = position.coords.longitude;
+
+    initMap(lat, lng);
+
+    // récupérer adresse
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=YOUR_GOOGLE_MAPS_API_KEY`);
+    const data = await res.json();
+
+    const address = data.results[0]?.formatted_address || "Inconnue";
+
+    // envoyer à Firebase
+    db.ref("users").push({ lat, lng, address, time: Date.now() });
+
+    // marker
+    new google.maps.Marker({ position:{lat,lng}, map });
+
+    loadUsers();
+  }
+
+  function error() {
+    alert("Position refusée");
+  }
+
+  function loadUsers() {
+    db.ref("users").once("value", snap => {
+      const data = snap.val();
+      if (!data) return;
+
+      Object.values(data).forEach(u => {
+        new google.maps.Marker({
+          position: { lat: u.lat, lng: u.lng },
+          map,
+          title: u.address
+        });
+      });
+    });
+  }
+
+  // init carte par défaut
+  initMap();
+</script>
+
+</body>
+</html>
+
