@@ -52,7 +52,7 @@
 
   function initMap(lat = 48.8566, lng = 2.3522) {
     map = L.map('map').setView([lat, lng], 12);
-    L.tileLayer('https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=TA_CLE_API').addTo(map);
+    L.tileLayer('https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=pk.e13d39038d291e1338bff9965816491f ').addTo(map);
   }
 
   function start() {
@@ -74,7 +74,7 @@
     L.marker([lat, lng]).addTo(map);
 
     // récupérer adresse
-    const res = await fetch(`https://us1.locationiq.com/v1/reverse?key=TA_CLE_API&lat=${lat}&lon=${lng}&format=json`);
+    const res = await fetch(`https://us1.locationiq.com/v1/reverse?key=pk.e13d39038d291e1338bff9965816491f &lat=${lat}&lon=${lng}&format=json`);
     const data = await res.json();
 
     const address = data.display_name || "Inconnue";
