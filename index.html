@@ -1,170 +1,154 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Carte temps réel</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Map</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
 body {
   margin:0;
-  font-family: Arial, sans-serif;
+  font-family: system-ui, Arial;
   background:#0f172a;
-  color:white;
 }
 
 /* MAP */
 #map {
-  height:100vh;
+  position:fixed;
+  top:0;
+  left:0;
   width:100%;
-  z-index:0;
+  height:100%;
 }
 
-/* PANEL */
-.panel {
-  position:absolute;
-  bottom:30px;
-  left:50%;
-  transform:translateX(-50%);
-  background:rgba(15,23,42,0.9);
-  backdrop-filter: blur(10px);
-  padding:16px 24px;
-  border-radius:12px;
-  z-index:1000;
+/* OVERLAY */
+.overlay {
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  z-index:9999;
+}
+
+/* CARD */
+.card {
+  background:#111827;
+  padding:24px;
+  border-radius:16px;
   text-align:center;
+  color:white;
+  width:260px;
 }
 
 /* BUTTON */
 button {
-  margin-top:10px;
-  padding:10px 18px;
+  margin-top:16px;
+  width:100%;
+  padding:12px;
   border:none;
-  border-radius:8px;
+  border-radius:10px;
   background:#3b82f6;
   color:white;
+  font-size:15px;
   cursor:pointer;
-  font-size:14px;
 }
 </style>
-
-<!-- Supabase -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-
-<!-- Leaflet -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 </head>
 
 <body>
 
 <div id="map"></div>
 
-<div class="panel" id="panel">
-  Ce site utilise votre position<br>
-  <button onclick="start()">Continuer</button>
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h3>📍 Autoriser la position</h3>
+    <p style="font-size:14px;opacity:0.7">
+      On affiche votre position sur la carte
+    </p>
+    <button onclick="start()">Continuer</button>
+  </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 <script>
-// CONFIG SUPABASE
+// ===== CONFIG =====
 const supabaseUrl = "https://bsxvtsuroulsqxmlujdf.supabase.co";
-const supabaseKey = "sb_publishable_XXXXX"; // ta clé
-const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+const supabaseKey = "sb_publishable_wO1610WLpZfjcNVRvyoBxA__HWD4Z_L";
+const db = supabase.createClient(supabaseUrl, supabaseKey);
 
-// VARIABLES
-let map;
-let markers = [];
-let myId = crypto.randomUUID();
+// ===== VARIABLES =====
+let map = L.map('map').setView([48.8566, 2.3522], 5);
+let markers = {};
+let myId = localStorage.getItem("id") || crypto.randomUUID();
+localStorage.setItem("id", myId);
 
-// INIT MAP
-function initMap(lat=48.8566, lng=2.3522){
-  map = L.map('map').setView([lat, lng], 12);
+// ===== MAP =====
+L.tileLayer(
+  'https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=pk.e13d39038d291e1338bff9965816491f'
+).addTo(map);
 
-  L.tileLayer(
-    'https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=pk.e13d39038d291e1338bff9965816491f'
-  ).addTo(map);
-}
-
-// START GEOLOC
+// ===== START =====
 function start(){
-  document.getElementById("panel").style.display = "none";
+  document.getElementById("overlay").style.display = "none";
 
-  if (!navigator.geolocation) {
-    alert("Géolocalisation non supportée");
-    return;
-  }
-
-  navigator.geolocation.watchPosition(success, error, {
-    enableHighAccuracy:true,
-    maximumAge:0,
-    timeout:5000
+  navigator.geolocation.watchPosition(updatePosition, err => {
+    alert("Active la localisation");
+  },{
+    enableHighAccuracy:true
   });
 }
 
-// SUCCESS GEOLOC
-async function success(position){
-  const lat = position.coords.latitude;
-  const lng = position.coords.longitude;
+// ===== UPDATE POSITION =====
+async function updatePosition(pos){
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
 
-  if (!map) initMap(lat, lng);
+  map.setView([lat, lng], 15);
 
-  // envoi à Supabase (update ou insert)
-  await supabaseClient
-    .from("users")
-    .upsert({
-      id: myId,
-      lat: lat,
-      lng: lng,
-      time: new Date().toISOString()
-    });
+  // envoyer position
+  await db.from("users").upsert({
+    id: myId,
+    lat: lat,
+    lng: lng,
+    time: new Date().toISOString()
+  });
 
-  loadUsers();
+  renderUsers();
 }
 
-// ERROR GEOLOC
-function error(){
-  alert("Position refusée");
-}
-
-// CLEAR MARKERS
-function clearMarkers(){
-  markers.forEach(m => map.removeLayer(m));
-  markers = [];
-}
-
-// LOAD USERS
-async function loadUsers(){
-  clearMarkers();
-
-  const { data } = await supabaseClient
-    .from("users")
-    .select("*");
-
-  if (!data) return;
+// ===== RENDER USERS =====
+async function renderUsers(){
+  const { data } = await db.from("users").select("*");
+  if(!data) return;
 
   data.forEach(u => {
-    const marker = L.marker([u.lat, u.lng])
-      .addTo(map)
-      .bindPopup(u.id === myId ? "Vous" : "Utilisateur");
-
-    markers.push(marker);
+    if(markers[u.id]){
+      markers[u.id].setLatLng([u.lat, u.lng]);
+    } else {
+      markers[u.id] = L.marker([u.lat, u.lng])
+        .addTo(map)
+        .bindPopup(u.id === myId ? "Vous" : "Utilisateur");
+    }
   });
 }
 
-// REALTIME
-supabaseClient
-  .channel('realtime-users')
-  .on('postgres_changes',{
-    event:'*',
-    schema:'public',
-    table:'users'
-  }, () => {
-    loadUsers();
-  })
-  .subscribe();
-
-// INIT DEFAULT
-initMap();
+// ===== REALTIME =====
+db.channel("live")
+.on("postgres_changes", {
+  event: "*",
+  schema: "public",
+  table: "users"
+}, () => {
+  renderUsers();
+})
+.subscribe();
 
 </script>
 
