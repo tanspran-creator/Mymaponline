@@ -6,24 +6,54 @@
 <title>Carte temps réel</title>
 
 <style>
-body { margin:0; font-family: Arial; background:#0f172a; color:white; }
-#map { height:100vh; }
-.panel {
-  position:absolute; bottom:20px; left:50%;
-  transform:translateX(-50%);
-  background:rgba(0,0,0,0.7);
-  padding:12px 20px; border-radius:10px;
+body {
+  margin:0;
+  font-family: Arial, sans-serif;
+  background:#0f172a;
+  color:white;
 }
+
+/* MAP */
+#map {
+  height:100vh;
+  width:100%;
+  z-index:0;
+}
+
+/* PANEL */
+.panel {
+  position:absolute;
+  bottom:30px;
+  left:50%;
+  transform:translateX(-50%);
+  background:rgba(15,23,42,0.9);
+  backdrop-filter: blur(10px);
+  padding:16px 24px;
+  border-radius:12px;
+  z-index:1000;
+  text-align:center;
+}
+
+/* BUTTON */
 button {
-  margin-top:8px; padding:8px 16px;
-  border:none; border-radius:6px;
-  background:#3b82f6; color:white; cursor:pointer;
+  margin-top:10px;
+  padding:10px 18px;
+  border:none;
+  border-radius:8px;
+  background:#3b82f6;
+  color:white;
+  cursor:pointer;
+  font-size:14px;
 }
 </style>
 
+<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<!-- Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 </head>
 
 <body>
@@ -36,23 +66,33 @@ button {
 </div>
 
 <script>
+// CONFIG SUPABASE
 const supabaseUrl = "https://bsxvtsuroulsqxmlujdf.supabase.co";
-const supabaseKey = "sb_publishable_XXXXX";
+const supabaseKey = "sb_publishable_XXXXX"; // ta clé
 const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
+// VARIABLES
 let map;
 let markers = [];
-let myId = crypto.randomUUID(); // identifiant utilisateur unique
+let myId = crypto.randomUUID();
 
+// INIT MAP
 function initMap(lat=48.8566, lng=2.3522){
   map = L.map('map').setView([lat, lng], 12);
+
   L.tileLayer(
     'https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=pk.e13d39038d291e1338bff9965816491f'
   ).addTo(map);
 }
 
+// START GEOLOC
 function start(){
   document.getElementById("panel").style.display = "none";
+
+  if (!navigator.geolocation) {
+    alert("Géolocalisation non supportée");
+    return;
+  }
 
   navigator.geolocation.watchPosition(success, error, {
     enableHighAccuracy:true,
@@ -61,34 +101,38 @@ function start(){
   });
 }
 
+// SUCCESS GEOLOC
 async function success(position){
   const lat = position.coords.latitude;
   const lng = position.coords.longitude;
 
-  if(!map) initMap(lat, lng);
+  if (!map) initMap(lat, lng);
 
-  // update ou insert user
+  // envoi à Supabase (update ou insert)
   await supabaseClient
     .from("users")
     .upsert({
       id: myId,
-      lat,
-      lng,
+      lat: lat,
+      lng: lng,
       time: new Date().toISOString()
     });
 
   loadUsers();
 }
 
+// ERROR GEOLOC
 function error(){
   alert("Position refusée");
 }
 
+// CLEAR MARKERS
 function clearMarkers(){
   markers.forEach(m => map.removeLayer(m));
   markers = [];
 }
 
+// LOAD USERS
 async function loadUsers(){
   clearMarkers();
 
@@ -96,9 +140,9 @@ async function loadUsers(){
     .from("users")
     .select("*");
 
-  if(!data) return;
+  if (!data) return;
 
-  data.forEach(u=>{
+  data.forEach(u => {
     const marker = L.marker([u.lat, u.lng])
       .addTo(map)
       .bindPopup(u.id === myId ? "Vous" : "Utilisateur");
@@ -107,19 +151,21 @@ async function loadUsers(){
   });
 }
 
-// 🔴 TEMPS RÉEL
+// REALTIME
 supabaseClient
-  .channel('realtime')
+  .channel('realtime-users')
   .on('postgres_changes',{
     event:'*',
     schema:'public',
     table:'users'
-  }, payload=>{
+  }, () => {
     loadUsers();
   })
   .subscribe();
 
+// INIT DEFAULT
 initMap();
+
 </script>
 
 </body>
