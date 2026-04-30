@@ -18,13 +18,12 @@
     }
   </style>
 
-  <!-- Firebase v8 (plus simple ici) -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 
-  <!-- Google Maps -->
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/> 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"> </script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </head>
 <body>
 
@@ -37,22 +36,16 @@
 </div>
 
 <script>
-  // CONFIG FIREBASE
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
-    projectId: "YOUR_PROJECT"
-  };
-
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+  // CONFIG SUPABASE
+  const supabaseUrl = "https://TON_PROJET.supabase.co";
+  const supabaseKey = "TA_PUBLIC_ANON_KEY";
+  const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
   let map;
 
   function initMap(lat = 48.8566, lng = 2.3522) {
     map = L.map('map').setView([lat, lng], 12);
-    L.tileLayer('https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=pk.e13d39038d291e1338bff9965816491f ').addTo(map);
+    L.tileLayer('https://{s}-tiles.locationiq.com/v3/streets/r/{z}/{x}/{y}.png?key=pk.e13d39038d291e1338bff9965816491f').addTo(map);
   }
 
   function start() {
@@ -74,16 +67,18 @@
     L.marker([lat, lng]).addTo(map);
 
     // récupérer adresse
-    const res = await fetch(`https://us1.locationiq.com/v1/reverse?key=pk.e13d39038d291e1338bff9965816491f &lat=${lat}&lon=${lng}&format=json`);
+    const res = await fetch(`https://us1.locationiq.com/v1/reverse?key=pk.e13d39038d291e1338bff9965816491f&lat=${lat}&lon=${lng}&format=json`);
     const data = await res.json();
 
     const address = data.display_name || "Inconnue";
 
-    // envoyer à Firebase
-    db.ref("users").push({ lat, lng, address, time: Date.now() });
+    // envoyer à Supabase
+    await supabaseClient.from("users").insert([
+      { lat: lat, lng: lng, address: address, time: Date.now() }
+    ]);
 
-    // marker
-  L.marker([lat, lng]).addTo(map).bindPopup(address);
+    // marker utilisateur
+    L.marker([lat, lng]).addTo(map).bindPopup(address);
 
     loadUsers();
   }
@@ -92,17 +87,17 @@
     alert("Position refusée");
   }
 
-  function loadUsers() {
-    db.ref("users").once("value", snap => {
-      const data = snap.val();
-      if (!data) return;
+  async function loadUsers() {
+    const { data, error } = await supabaseClient
+      .from("users")
+      .select("*");
 
-      Object.values(data).forEach(u => {
-        L.marker([u.lat, u.lng])
-  .addTo(map)
-  .bindPopup(u.address);
-        });
-      });
+    if (!data) return;
+
+    data.forEach(u => {
+      L.marker([u.lat, u.lng])
+        .addTo(map)
+        .bindPopup(u.address);
     });
   }
 
@@ -112,4 +107,3 @@
 
 </body>
 </html>
-
