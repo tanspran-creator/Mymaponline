@@ -83,7 +83,7 @@
     db.ref("users").push({ lat, lng, address, time: Date.now() });
 
     // marker
-    new google.maps.Marker({ position:{lat,lng}, map });
+  L.marker([lat, lng]).addTo(map).bindPopup(address);
 
     loadUsers();
   }
@@ -98,10 +98,9 @@
       if (!data) return;
 
       Object.values(data).forEach(u => {
-        new google.maps.Marker({
-          position: { lat: u.lat, lng: u.lng },
-          map,
-          title: u.address
+        L.marker([u.lat, u.lng])
+  .addTo(map)
+  .bindPopup(u.address);
         });
       });
     });
